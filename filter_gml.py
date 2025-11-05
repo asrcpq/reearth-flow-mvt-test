@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
 import zipfile
-import tempfile
 import re
 from pathlib import Path
 
 UNLINK_NON_GML = True
 
-def filter_file_by_ids(file_path, id_set):
-    """Filter a single GML file to only include cityObjectMembers with IDs in id_set."""
-    with open(file_path, 'r', encoding='utf-8') as f:
-        lines = f.readlines()
-
+def filter_gml_content(content, id_set):
+    lines = content.decode('utf-8').splitlines(keepends=True)
     result_lines = []
     inside_member = False
     current_member_lines = []
@@ -36,7 +32,6 @@ def filter_file_by_ids(file_path, id_set):
         if inside_member:
             current_member_lines.append(line)
             if not keep_current_member and 'gml:id="' in line:
-                # Extract gml:id from line and check if it's in our set - O(1) lookup
                 match = re.search(r'gml:id="([^"]+)"', line)
                 if match and match.group(1) in id_set:
                     keep_current_member = True
@@ -44,69 +39,60 @@ def filter_file_by_ids(file_path, id_set):
         else:
             result_lines.append(line)
 
-    return ''.join(result_lines), matched_ids
+    return ''.join(result_lines).encode('utf-8'), matched_ids
+
+
+def normalize_filter_paths(filter_dict):
+    return {f"udx/{k}": v for k, v in filter_dict.items()}
+
+
+def should_keep_unfiltered_file(rel_path):
+    if not rel_path.startswith("udx/"):
+        return True
+
+    file_suffix = Path(rel_path).suffix.lower()
+    if file_suffix == '.gml':
+        return False
+
+    return not UNLINK_NON_GML
+
+
+def process_filtered_file(src_zip, item, ids):
+    if ids == "all":
+        print(f"keeping all objects in {item.filename}")
+        return src_zip.read(item), [f"{item.filename}:all"]
+
+    id_set = set(ids)
+    print(f"filtering {item.filename} for {len(id_set)} IDs")
+    content = src_zip.read(item)
+    modified_content, matched_ids = filter_gml_content(content, id_set)
+
+    if matched_ids:
+        print(f"  found {len(matched_ids)} matching IDs")
+        return modified_content, list(matched_ids)
+    else:
+        print(f"  no matching IDs found, skipping file")
+        return None, []
 
 
 def filter_gml_objects(src_zip, dst_zip, filter_dict):
-    """
-    Filter GML objects based on filter_dict.
-    filter_dict format: {"path/to/file.gml": ["id1", "id2"], "other/path.gml": "all"}
-    Use "all" to include all objects from a file without filtering.
-    """
-    with tempfile.TemporaryDirectory() as temp_dir:
-        temp_path = Path(temp_dir)
-        extract_path = temp_path / "extracted"
-        extract_path.mkdir()
+    all_matched_ids = []
+    normalized_filter = normalize_filter_paths(filter_dict)
 
-        print("extracting", src_zip, "to", extract_path)
-        with zipfile.ZipFile(src_zip, 'r') as zip_ref:
-            zip_ref.extractall(extract_path)
-
-        udx_path = extract_path / "udx"
-        all_matched_ids = []
-
-        # Process each file in filter_dict independently
-        for rel_path, ids in filter_dict.items():
-            file_path = udx_path / rel_path
-
-            if not file_path.exists() or not file_path.is_file():
-                print(f"Warning: {rel_path} not found, skipping")
+    with zipfile.ZipFile(src_zip, 'r') as src, zipfile.ZipFile(dst_zip, 'w', zipfile.ZIP_DEFLATED) as dst:
+        for item in src.infolist():
+            if item.is_dir():
                 continue
 
-            if ids == "all":
-                # Keep entire file as-is, no processing needed
-                print(f"keeping all objects in {rel_path}")
-                all_matched_ids.append(f"{rel_path}:all")
-            else:
-                # Filter this specific file by its ID set
-                id_set = set(ids)
-                print(f"filtering {rel_path} for {len(id_set)} IDs")
-                modified_content, matched_ids = filter_file_by_ids(file_path, id_set)
-
-                if matched_ids:
-                    print(f"  found {len(matched_ids)} matching IDs in {rel_path}")
-                    with open(file_path, 'w', encoding='utf-8') as f:
-                        f.write(modified_content)
+            if item.filename in normalized_filter:
+                content, matched_ids = process_filtered_file(src, item, normalized_filter[item.filename])
+                if content is not None:
+                    dst.writestr(item, content)
                     all_matched_ids.extend(matched_ids)
-                else:
-                    print(f"  no matching IDs found in {rel_path}, removing file")
-                    file_path.unlink()
+            elif should_keep_unfiltered_file(item.filename):
+                dst.writestr(item, src.read(item))
 
-        # Remove all files NOT in filter_dict
-        for file in udx_path.glob("**/*"):
-            if not file.is_file():
-                continue
-            rel_path = str(file.relative_to(udx_path))
-            if rel_path not in filter_dict:
-                if file.suffix.lower() == '.gml' or UNLINK_NON_GML:
-                    file.unlink()
+    if not all_matched_ids:
+        raise ValueError("No GML objects matched filter")
 
-        if not all_matched_ids:
-            raise ValueError(f"No GML objects matched filter")
-
-        print("writing to", dst_zip)
-        Path(dst_zip).parent.mkdir(parents=True, exist_ok=True)
-        with zipfile.ZipFile(dst_zip, 'w', zipfile.ZIP_DEFLATED) as zip_ref:
-            for file_path in extract_path.rglob('*'):
-                if file_path.is_file():
-                    zip_ref.write(file_path, file_path.relative_to(extract_path))
+    print("written to", dst_zip)

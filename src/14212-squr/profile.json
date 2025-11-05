@@ -1,5 +1,5 @@
 {
-  "zip_path": "artifacts/14212_atsugi-shi_city_2023_citygml_2_op.zip",
+  "citygml_plateau": "14212_atsugi-shi_city_2023_citygml_2_op.zip",
   "fme_output": "artifacts/14212-squr_fme.zip",
   "workflow_path": "engine/runtime/examples/fixture/workflow/data-convert/plateau4/02-tran-rwy-trk-squr-wwy/workflow.yml",
   "tests": {

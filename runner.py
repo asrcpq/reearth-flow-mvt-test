@@ -8,6 +8,7 @@ from filter_gml import filter_gml_objects
 
 REEARTH_DIR = Path("/Users/tsq/Projects/reearth-flow")
 ROOT = Path(__file__).parent
+PLATEAU_ROOT = Path(os.getenv("HOME")) / "Projects" / "gkk"
 
 def run_test(profile_path, stages):
 	profile_path = Path(profile_path)
@@ -15,7 +16,7 @@ def run_test(profile_path, stages):
 	test_name = profile_path.parent.name
 
 	TEST_DIR = profile_path.parent
-	original_citygml_path = ROOT / profile["zip_path"]
+	original_citygml_path = PLATEAU_ROOT / profile["citygml_plateau"]
 	BUILD_DIR = ROOT / "build" / test_name
 	OUTPUT_DIR = BUILD_DIR / "output"
 	FME_DIR = BUILD_DIR / "fme"
