@@ -1,6 +1,6 @@
 {
   "zip_path": "artifacts/13382_mikurajima-mura_pref_2024_citygml_1_op.zip",
-  "fme_output": "artifacts/13382_fme.zip",
+  "fme_output": "artifacts/13382-test_fme.zip",
   "workflow_path": "engine/runtime/examples/fixture/workflow/data-convert/plateau4/02-tran-rwy-trk-squr-wwy/workflow.yml",
   "tests": {
     "compare_lines": {
@@ -9,5 +9,9 @@
     "compare_polygons": {
       "threshold": 0.01
     }
+  },
+  "description": "Testing worst-performing tran feature with 1.25 score: tran_92daeacd-0904-453f-b913-b3f07dd1e4b2",
+  "filter": {
+    "tran/50396478_tran_6697_op.gml": ["tran_92daeacd-0904-453f-b913-b3f07dd1e4b2"]
   }
 }
