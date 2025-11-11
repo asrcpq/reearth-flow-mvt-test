@@ -1,8 +1,6 @@
 import json
 import tempfile
 from pathlib import Path
-from shapely.geometry import Polygon, MultiPolygon, shape
-from pygltflib import GLTF2
 from tile_reader import read_glb_tile
 import numpy as np
 
@@ -150,12 +148,10 @@ def load_json(path):
         for feature in data:
             # Convert GeoJSON geometry to shapely geometry
             json_geom = feature["json_geometry"]
-            shapely_geom = shape(json_geom)
-
             for key in ["json_geometry", "json_ogc_wkt_crs", "core:creationDate", "json_featuretype"]:
                 if key in feature:
                     del feature[key]
-            ret[feature["gml_id"]] = (shapely_geom, feature)
+            ret[feature["gml_id"]] = (json_geom, feature)
     return ret
 
 def align_3dtiles(d1, d2):

@@ -8,6 +8,9 @@
     },
     "compare_polygons": {
       "threshold": 0.001
+    },
+    "compare_mvt_attributes": {
+      "convert_to_strings": true
     }
   },
   "filter": {

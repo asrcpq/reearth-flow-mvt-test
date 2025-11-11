@@ -1,24 +1,47 @@
 #!/usr/bin/env python3
 import sys, json, subprocess, os, zipfile, shutil
 from pathlib import Path
-from align_mvt import align_mvt
+from align_mvt import align_mvt, align_mvt_attr, dict_zip
 from align_3dtiles import align_3dtiles
 from geometry_comparison import compare_polygons, compare_lines, compare_3d_lines
 from run_workflow import main as run_workflow_main
 from filter_gml import filter_gml_objects
+from shapely.geometry import shape
 
 REEARTH_DIR = Path("/Users/tsq/Projects/reearth-flow")
 ROOT = Path(__file__).parent
 PLATEAU_ROOT = Path(os.getenv("HOME")) / "Projects" / "gkk"
 
-def run_mvt_test(name, cfg, FME_DIR, OUTPUT_DIR):
-	"""Run MVT-based comparison tests (2D tiles)."""
+def run_mvt_attr(name, cfg, d1, d2):
+	for gid, attr1, attr2 in align_mvt_attr(d1, d2):
+		print(gid)
+		if attr1 == None or attr2 == None:
+			raise ValueError(f"Missing attributes for gml_id: {gid}")
+		bads = []
+		for k, v1, v2 in dict_zip(attr1, attr2):
+			if cfg.get("convert_to_strings", False):
+				if str(v1) != str(v2):
+					bads.append((gid, k, v1, v2))
+			else:
+				if v1 != v2:
+					bads.append((gid, k, v1, v2))
+		if bads:
+			for gid, k, v1, v2 in bads:
+				if str(v1) == str(v2):
+					print(f"  MISMATCH gml_id={gid} key={k} fme={repr(v1)} reearth={repr(v2)}")
+				else:
+					print(f"  MISMATCH gml_id={gid} key={k} fme={v1} reearth={v2}")
+			raise ValueError(f"Attribute mismatches found for gml_id: {gid}")
+	return []
+
+def run_mvt_test(name, cfg, d1, d2):
+	thresh = cfg.get("threshold", 0.0)
 	zoom = cfg.get("zoom")
 	zmin = zoom[0] if zoom else None
 	zmax = zoom[1] if zoom else None
 
 	results = []
-	for path, gid, g1, g2 in align_mvt(FME_DIR, OUTPUT_DIR, zmin, zmax):
+	for path, gid, g1, g2 in align_mvt(d1, d2, zmin, zmax):
 		is_poly = (g1 or g2) and (g1 or g2).geom_type in ('Polygon', 'MultiPolygon')
 
 		if name == "compare_polygons" and is_poly:
@@ -28,20 +51,21 @@ def run_mvt_test(name, cfg, FME_DIR, OUTPUT_DIR):
 		else:
 			continue
 
-		results.append((score, path, gid, status))
+		failed = score > thresh
+		results.append((score, path, gid, status, failed))
 
 	return results
 
-def run_3dtiles_test(name, cfg, FME_DIR, OUTPUT_DIR):
+def run_3dtiles_test(name, cfg, d1, d2):
 	"""Run 3D tiles comparison tests."""
 	from shapely.ops import unary_union
 
-	fme_json = cfg.get("fme_json", FME_DIR / "export.json")
-	output_3dtiles = cfg.get("output_dir", OUTPUT_DIR / "tran_lod3")
+	fme_json = cfg.get("fme_json", d1 / "export.json")
+	output_3dtiles = cfg.get("output_dir", d2 / "tran_lod3")
 
 	results = []
 	for gid, f1, f2 in align_3dtiles(fme_json, output_3dtiles):
-		g1 = f1[0] if f1 else None  # FME ground truth geometry
+		g1 = shape(f1[0]) if f1 else None  # FME ground truth geometry
 
 		if f2:
 			hierarchical_geoms, props2 = f2
@@ -49,15 +73,17 @@ def run_3dtiles_test(name, cfg, FME_DIR, OUTPUT_DIR):
 			for level_idx, level_pieces in enumerate(hierarchical_geoms):
 				# Extract geometries from (geometry, error) tuples
 				geoms = [geom for geom, error in level_pieces]
+				max_error = max((error for geom, error in level_pieces), default=0.0001)
 				# Union all pieces at this level
 				g2 = unary_union(geoms) if len(geoms) > 1 else geoms[0] if geoms else None
-				print(g1.bounds, g2.bounds)
 				status, score = compare_3d_lines(g1, g2)
-				results.append((score, f"{output_3dtiles}/LOD{level_idx}", gid, status))
+				score /= max_error
+				failed = score > max_error
+				results.append((score, f"{output_3dtiles}/LOD{level_idx}", gid, status, failed))
 		else:
 			# No output geometry at all
 			status, score = compare_3d_lines(g1, None)
-			results.append((score, str(output_3dtiles), gid, status))
+			results.append((score, str(output_3dtiles), gid, status, True))
 
 	return results
 
@@ -118,24 +144,24 @@ def run_test(profile_path, stages):
 
 		all_passed = True
 		for name, cfg in tests.items():
-			thresh = cfg.get("threshold", 0.0)
-
 			# Run appropriate test based on name
 			if name == "compare_3d_lines":
 				results = run_3dtiles_test(name, cfg, FME_DIR, OUTPUT_DIR)
-			else:
+			elif name == "compare_mvt_attributes":
+				results = run_mvt_attr(name, cfg, FME_DIR, OUTPUT_DIR)
+			elif name in ("compare_polygons", "compare_lines"):
 				results = run_mvt_test(name, cfg, FME_DIR, OUTPUT_DIR)
+			else:
+				raise ValueError(f"Unknown test name: {name}")
 
 			# Calculate statistics
 			worst = 0.0
 			fails = 0
-			for score, path, gid, status in results:
+			for score, path, gid, status, failed in results:
 				worst = max(worst, score)
-				if score > thresh:
+				if failed:
 					fails += 1
-
-			if fails > 0:
-				all_passed = False
+					all_passed = False
 
 			print(f"\n{name}: {len(results)} total, {fails} failed")
 			if fails > 0:
@@ -144,7 +170,7 @@ def run_test(profile_path, stages):
 				print(f"  worst: {worst:.6f}")
 
 			print(f"  Worst 5:")
-			for score, path, gid, status in sorted(results, reverse=True)[:5]:
+			for score, path, gid, status, failed in sorted(results, reverse=True)[:5]:
 				print(f"    {path} | {gid} | {score:.6f} | {status}")
 
 		print("\nTest PASSED" if all_passed else "\nTest FAILED")

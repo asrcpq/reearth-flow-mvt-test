@@ -3,6 +3,7 @@ from pathlib import Path
 import trimesh
 import numpy as np
 from shapely.geometry import Polygon
+from pprint import pprint
 
 def extract_strings(binary_blob, buffer_views, values_idx, offsets_idx, count):
     # Get offsets from the OFFSETS buffer
@@ -36,7 +37,7 @@ def read_glb_json(filepath):
         buffer = f.read(buffer_length)
         return json.loads(json_data), buffer
 
-def read_glb_tile(glb_path):
+def read_glb_tile(glb_path, apply_rtc=True):
     result = {}
     # metadata extraction
     j, buf = read_glb_json(glb_path)
@@ -52,15 +53,29 @@ def read_glb_tile(glb_path):
     # unzipping properties
     result = {i: ({k: v[i] for k, v in prop["properties"].items()}, []) for i in range(count)}
 
+    # Extract RTC_CENTER (Relative To Center) from node translation
+    rtc_center = None
+    if apply_rtc and "nodes" in j and len(j["nodes"]) > 0:
+        node = j["nodes"][0]
+        if "translation" in node:
+            rtc_center = np.array(node["translation"])
+            # print(f"RTC_CENTER (ECEF): {rtc_center}")
+
     # geometry extraction
     scene = trimesh.load(str(glb_path))
     for geom_name, mesh in scene.geometry.items():
         assert "_FEATURE_ID_1" not in mesh.vertex_attributes, "Multiple feature IDs per mesh not supported"
         batch_ids = mesh.vertex_attributes['_FEATURE_ID_0']
         assert len(batch_ids) == len(mesh.vertices), f"{len(batch_ids)} vs {len(mesh.vertices)}"
+
+        # Apply RTC transformation if available
+        vertices = mesh.vertices.copy()
+        if rtc_center is not None:
+            vertices = vertices + rtc_center
+
         for idx, face in enumerate(mesh.faces):
-            vertices = mesh.vertices[face]
-            poly = Polygon(vertices)
+            face_vertices = vertices[face]
+            poly = Polygon(face_vertices)
             for vid in face:
                 for batch_id in batch_ids[vid]:
                     batch_id = int(batch_id)
@@ -72,7 +87,7 @@ if __name__ == '__main__':
     if len(sys.argv) < 2:
         print("Usage: python tile_reader.py <tile_file>")
         sys.exit(1)
-    features = read_tile_features(tile_file)
+    features = read_glb_tile(sys.argv[1])
     for i, (props, geoms) in features.items():
         print(f"Feature {i}, Geometries: {len(geoms)} triangles")
         if 'gml_id' in props:

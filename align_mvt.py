@@ -81,3 +81,23 @@ def align_mvt(d1, d2, zmin=None, zmax=None):
 
     for path, tile1, tile2 in dict_zip(t1, t2):
         yield from align_mvt_file(tile1, tile2, path)
+
+def load_mvt_attr(d):
+    ret = {}
+    for p in d.rglob("*.pbf"):
+        with open(p, "rb") as f:
+            tile = mapbox_vector_tile.decode(f.read())
+        for k, v in tile.items():
+            for feature in v["features"]:
+                props = feature["properties"]
+                gml_id = props["gml_id"]
+                if gml_id in ret:
+                    assert ret[gml_id].items() <= props.items(), f"Attribute mismatch for {gml_id}"
+                else:
+                    ret[gml_id] = props
+    return ret
+
+def align_mvt_attr(d1, d2):
+    map1 = load_mvt_attr(d1)
+    map2 = load_mvt_attr(d2)
+    yield from dict_zip(map1, map2)

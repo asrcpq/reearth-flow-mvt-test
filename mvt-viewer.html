@@ -12,7 +12,7 @@
         #gridToggle { margin-bottom: 10px; }
         .layer-item { display: grid; grid-template-columns: auto 1fr; align-items: center; }
         .property { display: flex; }
-        .key { font-weight: bold; width: 40%; }
+        .key { font-weight: bold; width: 40%; word-wrap: break-word; overflow-wrap: anywhere; }
         .value { width: 60%; }
         details summary { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
         details summary button { margin-left: 10px; }
@@ -21,7 +21,7 @@
 <body>
     <div id="map"></div>
     <div id="sidebar">
-        <input type="text" id="layersFileInput" value="/Projects/reearth-flow-mvt-test/build/13382/output_list">
+        <input type="text" id="layersFileInput" value="/Projects/reearth-flow-tiles-test/build/14212-squr/output_list">
         <div id="gridToggle">
             <label><input type="checkbox" id="showGrid"> Show Tile Grid</label>
         </div>
