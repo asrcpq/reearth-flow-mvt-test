@@ -7,6 +7,7 @@ from geometry_comparison import compare_polygons, compare_lines, compare_3d_line
 from run_workflow import main as run_workflow_main
 from filter_gml import filter_gml_objects
 from shapely.geometry import shape
+from pprint import pprint
 
 REEARTH_DIR = Path("/Users/tsq/Projects/reearth-flow")
 ROOT = Path(__file__).parent
@@ -19,7 +20,9 @@ def cast_attr(key, value, table):
 	if ty == "string":
 		return str(value)
 	elif ty == "json":
-		return json.loads(value)
+		j = json.loads(value)
+		# pprint(j)
+		return j
 	else:
 		raise ValueError(f"Unknown cast type: {ty}")
 
@@ -28,12 +31,8 @@ def compare_recurse(key, v1, v2, gid, bads, casts):
 	v2 = cast_attr(key, v2, casts)
 	# print(key, casts.get("key", ""), type(v1), type(v2))
 	if type(v1) != type(v2):
-		# temporarily allow single-element lists to match their element
-		if isinstance(v1, list) and len(v1) == 1:
-			v1 = v1[0]
-		else:
-			bads.append((gid, key, v1, v2))
-			return
+		bads.append((gid, key, v1, v2))
+		return
 	if isinstance(v1, dict):
 		for k in set(v1.keys()).union(set(v2.keys())):
 			compare_recurse(f"{key}.{k}", v1.get(k), v2.get(k), gid, bads, casts)

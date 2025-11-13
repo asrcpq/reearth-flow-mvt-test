@@ -9,6 +9,12 @@
     },
     "compare_polygons": {
       "threshold": 0.001
+    },
+    "compare_mvt_attributes": {
+      "casts": {
+        "attributes": "json",
+        "attributes.meshcode": "string"
+      }
     }
   },
   "description": "thin railway polygons cause problem, so we test from zoom level 11. also see 16202-rwy-test",
