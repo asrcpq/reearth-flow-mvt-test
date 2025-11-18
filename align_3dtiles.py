@@ -8,6 +8,9 @@ def build_tile_hierarchy_v11(tile_node, base_dir, depth=0):
     result = []
     geometric_error = tile_node.get('geometricError', 0)
     contents = tile_node.get('contents', [])
+    content = tile_node.get('content', None)
+    if content:
+        contents.append(content)
     for content_item in contents:
         if 'uri' in content_item:
             tile_uri = content_item['uri']
@@ -148,7 +151,7 @@ def load_json(path):
         for feature in data:
             # Convert GeoJSON geometry to shapely geometry
             json_geom = feature["json_geometry"]
-            for key in ["json_geometry", "json_ogc_wkt_crs", "core:creationDate", "json_featuretype"]:
+            for key in ["json_geometry", "json_ogc_wkt_crs", "json_featuretype"]:
                 if key in feature:
                     del feature[key]
             ret[feature["gml_id"]] = (json_geom, feature)

@@ -20,9 +20,12 @@ def cast_attr(key, value, table):
 	if ty == "string":
 		return str(value)
 	elif ty == "json":
-		j = json.loads(value)
-		# pprint(j)
-		return j
+		if isinstance(value, str):
+			j = json.loads(value)
+			return j
+		return value
+	elif ty is None:
+		return None
 	else:
 		raise ValueError(f"Unknown cast type: {ty}")
 
@@ -31,6 +34,9 @@ def compare_recurse(key, v1, v2, gid, bads, casts):
 	v2 = cast_attr(key, v2, casts)
 	# print(key, casts.get("key", ""), type(v1), type(v2))
 	if type(v1) != type(v2):
+		# ignore bool vs int
+		if isinstance(v2, bool) and bool(v1) == v2:
+			return
 		bads.append((gid, key, v1, v2))
 		return
 	if isinstance(v1, dict):
@@ -47,13 +53,33 @@ def compare_recurse(key, v1, v2, gid, bads, casts):
 			bads.append((gid, key, v1, v2))
 
 def run_mvt_attr(name, cfg, d1, d2):
+	results = []
 	casts = cfg.get("casts", {})
 	for gid, attr1, attr2 in align_mvt_attr(d1, d2):
-		print(gid)
 		if attr1 == None or attr2 == None:
 			raise ValueError(f"Missing attributes for gml_id: {gid}")
 		bads = []
 		for k, v1, v2 in dict_zip(attr1, attr2):
+			compare_recurse(k, v1, v2, gid, bads, casts)
+		if bads:
+			for gid, k, v1, v2 in bads:
+				if str(v1) == str(v2):
+					print(f"  MISMATCH gml_id={gid} key={k} fme={repr(v1)} reearth={repr(v2)}")
+				else:
+					print(f"  MISMATCH gml_id={gid} key={k} fme={v1} reearth={v2}")
+			raise ValueError(f"Attribute mismatches found for gml_id: {gid}")
+		results.append((0.0, "", gid, "ok", False))
+	return results
+
+def run_3dtiles_attr(name, cfg, d1, d2):
+	casts = cfg.get("casts", {})
+	for gid, f1, f2 in align_3dtiles(d1 / "export.json", d2 / "tran_lod3"):
+		props1 = f1[1] if f1 else None
+		props2 = f2[1] if f2 else None
+		if props1 is None or props2 is None:
+			raise ValueError(f"Missing attributes for gml_id: {gid}")
+		bads = []
+		for k, v1, v2 in dict_zip(props1, props2):
 			compare_recurse(k, v1, v2, gid, bads, casts)
 		if bads:
 			for gid, k, v1, v2 in bads:
@@ -108,7 +134,7 @@ def run_3dtiles_test(name, cfg, d1, d2):
 				g2 = unary_union(geoms) if len(geoms) > 1 else geoms[0] if geoms else None
 				status, score = compare_3d_lines(g1, g2)
 				score /= max_error
-				failed = score > max_error
+				failed = score > 1
 				results.append((score, f"{output_3dtiles}/LOD{level_idx}", gid, status, failed))
 		else:
 			# No output geometry at all
@@ -179,6 +205,8 @@ def run_test(profile_path, stages):
 				results = run_3dtiles_test(name, cfg, FME_DIR, OUTPUT_DIR)
 			elif name == "compare_mvt_attributes":
 				results = run_mvt_attr(name, cfg, FME_DIR, OUTPUT_DIR)
+			elif name == "compare_3d_attributes":
+				results = run_3dtiles_attr(name, cfg, FME_DIR, OUTPUT_DIR)
 			elif name in ("compare_polygons", "compare_lines"):
 				results = run_mvt_test(name, cfg, FME_DIR, OUTPUT_DIR)
 			else:

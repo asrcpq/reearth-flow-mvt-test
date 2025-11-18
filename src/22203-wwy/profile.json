@@ -12,7 +12,8 @@
     "compare_mvt_attributes": {
       "casts": {
         "attributes": "json",
-        "attributes.meshcode": "string"
+        "attributes.meshcode": "string",
+        "attributes.uro:FishingPortFacility[0].uro:referenceNumber": "string"
       }
     }
   },

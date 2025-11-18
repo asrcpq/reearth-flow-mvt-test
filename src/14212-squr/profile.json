@@ -11,12 +11,8 @@
     },
     "compare_mvt_attributes": {
       "casts": {
-        "uro_StationSquareAttribute_uro_areaPlanned": "string",
-        "uro_TerminalAttribute_uro_areaPlanned": "string",
         "attributes": "json",
-        "attributes.meshcode": "string",
-        "attributes.uro:TerminalAttribute.uro:areaPlanned": "string",
-        "attributes.uro:StationSquareAttribute.uro:areaPlanned": "string"
+        "attributes.meshcode": "string"
       }
     }
   },
